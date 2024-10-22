@@ -1,0 +1,6 @@
+dataset/
+figs/
+plots/
+videos/
+
+**/__pycache__/**

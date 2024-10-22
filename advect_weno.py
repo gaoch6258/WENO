@@ -3,6 +3,7 @@ import matplotlib.pyplot as plt
 from weno import *
 from test_functions import *
 
+
 wavespeed        = 1.0
 cfl_number       = 0.5
 func_id          = (input('Which IC function do you want to advect? Examples include: gaussian, simple_step, square_well, quadratic_well, trig_disc. See test_functions.py for more info. \n'))
@@ -39,7 +40,7 @@ def compute_du_weno(xv, u, dt):
             fi = f0[i-3:i+2]
             return nonlinear_weighted(*fi)
         else:
-            assert(false)
+            assert(False)
 
     fhat = np.array([fhat_at_iph(i) for i in range(3, len(u) - 2)])
     return -(fhat[1:] - fhat[:-1]) * dt / dx
@@ -50,7 +51,7 @@ def extend(u, num_guard_zones):
     return np.concatenate([u[-num_guard_zones:], u, u[0:num_guard_zones]])
 
 
-
+    
 def update(t, u, xv, compute_du = compute_du_weno):
     if compute_du == compute_du_weno:
         ng = 3
