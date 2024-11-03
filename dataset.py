@@ -1,24 +1,28 @@
 import torch
-
+import torch.utils
+import h5py
+import numpy as np
 
 class FourierDataset(torch.utils.data.Dataset):
-    def __init__(self, num_cells, series, wavespeed, cfl_number, num_samples, scale=1024):
+    def __init__(self, num_cells, series, wavespeed, cfl_number, num_samples, dt, scale=1024):
         self.num_cells = num_cells
         self.series = series
         self.wavespeed = wavespeed
         self.cfl_number = cfl_number
         self.num_samples = num_samples
+        self.dt = dt
         self.scale = scale
+        self.nu = 0.001
 
     def __len__(self):
         return self.num_samples
 
     def __getitem__(self, idx):
-        xv = torch.linspace(-1, 1, self.num_cells + 1)
+        xv = torch.linspace(-1, 1, self.num_cells + 1, dtype=torch.float64)
         xc = 0.5 * (xv[1:] + xv[:-1])
-        sin_series = torch.rand(self.scale, self.series, 1)
-        cos_series = torch.rand(self.scale, self.series, 1)
-        omega = torch.arange(self.series) * torch.pi
+        sin_series = torch.rand(self.scale, self.series, 1) / self.series
+        cos_series = torch.rand(self.scale, self.series, 1) / self.series
+        omega = torch.arange(self.series) * torch.pi *2
         # print(f'omega: {omega}, sin_series: {sin_series}, cos_series: {cos_series}')
 
         # u
@@ -27,16 +31,76 @@ class FourierDataset(torch.utils.data.Dataset):
         u = sin.sum(dim=1) + cos.sum(dim=1)
         
         # u_diff
-        sin_diff = - cos_series * omega[None, :, None] * torch.sin(omega[:, None] * xc[None, :]).unsqueeze(0)
-        cos_diff = sin_series * omega[None, :, None] * torch.cos(omega[:, None] * xc[None, :]).unsqueeze(0)
+        sin_diff = - sin_series * omega[None, :, None]**2 * torch.sin(omega[:, None] * xc[None, :]).unsqueeze(0)
+        cos_diff = - cos_series * omega[None, :, None]**2 * torch.cos(omega[:, None] * xc[None, :]).unsqueeze(0)
         u_diff = sin_diff.sum(dim=1) + cos_diff.sum(dim=1)
 
         # uv
         sin = sin_series * torch.sin(omega[:, None] * xv[None, :]).unsqueeze(0)
         cos = cos_series * torch.cos(omega[:, None] * xv[None, :]).unsqueeze(0)
         uv = sin.sum(dim=1) + cos.sum(dim=1)
+
+        # unext
+        xc_next = xc - self.wavespeed * self.dt
+        xc_next = (xc_next + 1) % 2 - 1
+        sin = sin_series * torch.sin(omega[:, None] * xc_next[None, :]).unsqueeze(0)
+        cos = cos_series * torch.cos(omega[:, None] * xc_next[None, :]).unsqueeze(0)
+        unext = sin.sum(dim=1) + cos.sum(dim=1)
         
-        return u.unsqueeze(1), u_diff.unsqueeze(1), uv.unsqueeze(1)
+        return u.unsqueeze(1), u_diff.unsqueeze(1), uv.unsqueeze(1), unext.unsqueeze(1)
+
+
+class PDEBenchDataset(torch.utils.data.Dataset):
+    def __init__(self, xc, numbers=10, k_tot=8, init_key=2022, num_k_chosen=2, norm=False):
+        self.xc = xc
+        self.numbers = numbers
+        self.k_tot = k_tot
+        self.init_key = init_key
+        self.num_k_chosen = num_k_chosen
+        self.nu = 0.001
+    
+        rng = np.random.default_rng(init_key)
+
+        selected = rng.integers(0, k_tot, size=(numbers, num_k_chosen))
+        selected = np.eye(k_tot)[selected].sum(axis=1)
+        kk = 2.0 * np.pi * np.arange(1, k_tot + 1) * selected  / (xc[-1] - xc[0])
+        amp = rng.uniform(size=(numbers, k_tot, 1))
+
+        phs = 2.0 * np.pi * rng.uniform(size=(numbers, k_tot, 1))
+        u = amp * np.sin(kk[:, :, np.newaxis] * xc[np.newaxis, np.newaxis, :] + phs)
+        u = np.sum(u, axis=1)
+
+        # Absolute value condition
+        conds = rng.choice([0, 1], p=[0.9, 0.1], size=numbers)
+
+        # Apply np.abs only where cond == 1
+        u = np.where(conds[:, None] == 1, np.abs(u), u)
+
+        # Random flip of sign
+        sgn = rng.choice([1, -1], size=(numbers, 1))
+        u *= sgn
+
+        # Window function
+        conds = rng.choice([0, 1], p=[0.9, 0.1], size=numbers)
+        _xc = np.repeat(xc[None, :], numbers, axis=0)
+        mask = np.ones_like(_xc)
+        xL = rng.uniform(0.1, 0.45, size=(numbers, 1))  # shape (numbers, 1) for broadcasting
+        xR = rng.uniform(0.55, 0.9, size=(numbers, 1))
+        trns = 0.01 * np.ones_like(conds)[:, None]
+
+        # Apply the window function where cond == 1
+        mask = np.where(
+            conds[:, None] == 1,
+            0.5 * (np.tanh((_xc - xL) / trns) - np.tanh((_xc - xR) / trns)),
+            mask
+        )
+        u *= mask
+
+        if norm:
+            u -= np.min(u, axis=1, keepdims=True)  # Positive values
+            u /= np.max(u, axis=1, keepdims=True)  # Normalize to [0, 1]
+
+        return u
 
 
 class PolyDataset(torch.utils.data.Dataset):
@@ -90,3 +154,26 @@ class WenoDataset(torch.utils.data.Dataset):
         u = torch.load(f'dataset/u{idx}.pt')
         uv = torch.load(f'dataset/uv{idx}.pt')
         return u, u, uv
+
+class BurgersDataset(torch.utils.data.Dataset):
+    def __init__(self, roll_out=200):
+        f = h5py.File('/home/gaoch/burgers.hdf5', 'r')
+        self.dt = 0.01
+        self.dx = 2 / 1024
+        self.nu = 0.001
+        self.u = np.array(f['tensor'], dtype=np.float64)  # (10000, 201, 1024)
+        self.roll_out = roll_out
+    
+    def __len__(self):
+        return 10000
+    
+    def __getitem__(self, idx):
+        return torch.tensor(self.u[idx], dtype=torch.float64)
+
+
+if __name__ == '__main__':
+    num_cells = 1024
+    xv = torch.linspace(-1, 1, 1024 + 1)
+    xc = 0.5 * (xv[1:] + xv[:-1])
+    dataset = PDEBenchDataset(xc)
+

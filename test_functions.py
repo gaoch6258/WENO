@@ -10,6 +10,12 @@ import numpy as np
 from numpy.random import rand
 
 sigma            = 0.2
+
+def burgers(x):
+    sample = np.load('/home/gaoch/1.npy')
+    return sample[1, 0, int((x+1)//(2/1024))]
+
+
 def gaussian(x, sigma=sigma):
     return np.exp(-x**2/sigma)
 
@@ -34,7 +40,7 @@ def square_well(x, cd1 = -0.5, cd2 = 0.5):
         u = 0.
     return u
 
-def quadratic(x, b, a):
+def quadratic(x, b=0, a=1):
     return a*x**2 + b
 
 def quadratic_well(x, cd1 = -0.5, cd2 = 0.5, depth=-10, ref_ht = 0.):

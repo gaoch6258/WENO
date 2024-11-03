@@ -115,10 +115,21 @@ def nonlinear_weighted(f0, f1, f2, f3, f4):
 
     gammas = [1./10., 6./10., 3./10.]
     (beta_1, beta_2, beta_3) = js_betas(f0,f1,f2,f3,f4)
+    # print('beta_1', beta_1)
+    # print('beta_2', beta_2)
+    # print('beta_3', beta_3)
     (w1,w2,w3) = w(gammas, beta_1, beta_2, beta_3)
+    # print('w1', w1)
+    # print('w2', w2)
+    # print('w3', w3)
+
 
     sa = stencil_a(f0, f1, f2, f3, f4)
     sb = stencil_b(f0, f1, f2, f3, f4)
     sc = stencil_c(f0, f1, f2, f3, f4)
 
+    # print('sa', sa)
+    # print('sb', sb)
+    # print('sc', sc)
+    # exit()
     return w1*sa+w2*sb+w3*sc

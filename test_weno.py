@@ -16,10 +16,10 @@ cfl_number       = 0.5
 # t_final         = eval(input('End time:\n'))
 # first_order      = input("Do you also want to plot the first order solution for comparison? [y/n]\n")
 func_id = 'quadratic'
-func = quadratic
-num_cells = 20
+func = burgers
+num_cells = 1024
 plot_L2 = 'n'
-t_final = 1.0
+t_final = 0.5
 first_order = 'n'
 
 def solution_at_time(t, x, func, a = wavespeed):
@@ -71,9 +71,14 @@ def update(t, u, xv, compute_du = compute_du_weno):
     dt = abs(cfl_number * dx[0] / wavespeed)
 
     # dataset.nu / torch.pi * net.weno(net.weno(uc)/net.dt) - net.weno(uc) * uc
-    k1 = compute_du(xv, extend(u +      0.0, ng), dt)
+    # k1 = - 0.001 / np.pi * compute_du(xv, extend(-compute_du(xv, extend(u +      0.0, ng)/dt, dt), ng), dt) + compute_du(xv, extend(u +      0.0, ng), dt) * u
+    # k2 = - 0.001 / np.pi * compute_du(xv, extend(-compute_du(xv, extend(u + k1 * 0.5, ng)/dt, dt), ng), dt) + compute_du(xv, extend(u + k1 * 0.5, ng), dt) * (u + k1 * 0.5)
+    # k3 = - 0.001 / np.pi * compute_du(xv, extend(-compute_du(xv, extend(u + k2 * 0.5, ng)/dt, dt), ng), dt) + compute_du(xv, extend(u + k2 * 0.5, ng), dt) * (u + k2 * 0.5)
+    # k4 = - 0.001 / np.pi * compute_du(xv, extend(-compute_du(xv, extend(u + k3 * 1.0, ng)/dt, dt), ng), dt) + compute_du(xv, extend(u + k3 * 1.0, ng), dt) * (u + k3 * 1.0)
+
     # print('k1', k1, dt)
     # exit()
+    k1 = compute_du(xv, extend(u +      0.0, ng), dt)
     k2 = compute_du(xv, extend(u + k1 * 0.5, ng), dt)
     k3 = compute_du(xv, extend(u + k2 * 0.5, ng), dt)
     k4 = compute_du(xv, extend(u + k3 * 1.0, ng), dt)
@@ -100,6 +105,7 @@ def evolve_with_num_cells(num_cells, func, compute_du = compute_du_weno):
     #tnext = 0
     while t < t_final:
         t, u = update(t, u, xv, compute_du = compute_du)
+        print(t)
         if (t-ts[-1]) >= 0.01:
             #print("t:", t)
             us = np.vstack((us, u))
@@ -193,19 +199,19 @@ def L2_plot(all_n_cells, L2s):
 
 if __name__ == "__main__":
 
-    if plot_L2 == 'y':
-        L2s = []
-        for n_cells in all_res:
-            print('n_cells', n_cells)
-            ts, xs, us, L2 = evolve_with_num_cells(n_cells, func, compute_du = compute_du_weno)
-            L2s.append(L2)
-        np.savetxt('L2.txt', np.array(L2s))
-        L2_plot(all_res,L2s)
+    # if plot_L2 == 'y':
+    #     L2s = []
+    #     for n_cells in all_res:
+    #         print('n_cells', n_cells)
+    #         ts, xs, us, L2 = evolve_with_num_cells(n_cells, func, compute_du = compute_du_weno)
+    #         L2s.append(L2)
+    #     np.savetxt('L2.txt', np.array(L2s))
+    #     L2_plot(all_res,L2s)
 
     if first_order == 'n':
         ts, xs, us, L2 = evolve_with_num_cells(num_cells, func, compute_du = compute_du_weno)
         plot_solution(ts, xs, us)
-    if first_order == 'y':
-        ts, xs, us, L2 = evolve_with_num_cells(num_cells, func, compute_du = compute_du_weno)
-        ts_1, xs_1, us_1, L2_1 = evolve_with_num_cells(num_cells, func, compute_du = compute_du_upwind)
-        plot_solution(ts, xs, us, ts_1 = ts_1, xs_1 = xs_1, us_1 = us_1)
+    # if first_order == 'y':
+    #     ts, xs, us, L2 = evolve_with_num_cells(num_cells, func, compute_du = compute_du_weno)
+    #     ts_1, xs_1, us_1, L2_1 = evolve_with_num_cells(num_cells, func, compute_du = compute_du_upwind)
+    #     plot_solution(ts, xs, us, ts_1 = ts_1, xs_1 = xs_1, us_1 = us_1)
