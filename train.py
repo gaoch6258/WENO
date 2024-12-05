@@ -1,4 +1,4 @@
-from model import stencilCNN
+from model import stencilCNN1D
 import torch
 from matplotlib import pyplot as plt
 import time
@@ -17,7 +17,7 @@ dataset = FourierDataset(num_cells=num_cells, series=16, wavespeed=1, cfl_number
 # dataset = WenoDataset()
 dataloader = torch.utils.data.DataLoader(dataset, batch_size=2, shuffle=True)
 
-net = stencilCNN(dt, dx).cuda()
+net = stencilCNN1D(dt, dx).cuda()
 if resume:
     net.load_state_dict(torch.load('./ckpt/stencilCNN.pt'))
 criterion = torch.nn.MSELoss()

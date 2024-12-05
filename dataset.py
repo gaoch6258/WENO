@@ -3,6 +3,88 @@ import torch.utils
 import h5py
 import numpy as np
 
+
+def get_dataset(name, config):
+    if name == 'Fourier':
+        return FourierDataset()
+    elif name == 'Poly':
+        return PolyDataset()
+    elif name == 'Weno':
+        return WenoDataset()
+    elif name == 'Burgers1D':
+        return Burgers1DDataset(config['data_path'])
+    elif name == 'Advection1D':
+        return Advection1DDataset(config['data_path'])
+    elif name == 'ReactionDiffusion1D':
+        return ReactionDiffusion1DDataset(config['data_path'])
+    elif name == 'DiffusionSorption1D':
+        return DiffusionSorption1DDataset(config['data_path'])
+    else:
+        raise ValueError(f'Unknown dataset {name}')
+
+class Burgers1DDataset(torch.utils.data.Dataset):
+    def __init__(self, data_path):
+        f = h5py.File(data_path, 'r')
+        self.dt = 0.01
+        self.dx = 2 / 1024
+        self.nu = 0.001
+        self.u = np.array(f['tensor'], dtype=np.float64)  # (10000, 201, 1024)
+        self.u = torch.tensor(self.u, dtype=torch.float64)
+        self.T = self.u.shape[1]
+    
+    def __len__(self):
+        return self.u.shape[0]
+    
+    def __getitem__(self, idx):
+        return self.u[idx]
+
+class Advection1DDataset(torch.utils.data.Dataset):
+    def __init__(self, data_path):
+        f = h5py.File(data_path, 'r')
+        self.dt = 0.01
+        self.dx = 1 / 1024
+        self.u = np.array(f['tensor'], dtype=np.float64)
+        self.u = torch.tensor(self.u, dtype=torch.float64)
+
+    def __len__(self):
+        return self.u.shape[0]
+    
+    def __getitem__(self, idx):
+        return self.u[idx]
+
+class ReactionDiffusion1DDataset(torch.utils.data.Dataset):
+    def __init__(self, data_path):
+        f = h5py.File(data_path, 'r')
+        self.dt = 0.01
+        self.dx = 1 / 1024
+        self.u = np.array(f['tensor'], dtype=np.float64)
+        self.u = torch.tensor(self.u, dtype=torch.float64)
+
+    def __len__(self):
+        return self.u.shape[0]
+    
+    def __getitem__(self, idx):
+        return self.u[idx]
+
+class DiffusionSorption1DDataset(torch.utils.data.Dataset):
+    def __init__(self, data_path):
+        f = h5py.File(data_path, 'r')
+        self.dt = 0.01
+        self.dx = 1 / 1024
+        samples = []
+        for i in range (10000):
+            sample = np.array(f[str(i).zfill(4)]['data'], dtype=np.float64).squeeze()
+            samples.append(sample)
+        self.u = np.array(samples, dtype=np.float64)
+        self.u = torch.tensor(self.u, dtype=torch.float64)  # (10000, 101, 1024)
+    
+    def __len__(self):
+        return self.u.shape[0]
+    
+    def __getitem__(self, idx):
+        return self.u[idx]
+
+
 class FourierDataset(torch.utils.data.Dataset):
     def __init__(self, num_cells, series, wavespeed, cfl_number, num_samples, dt, scale=1024):
         self.num_cells = num_cells
@@ -155,20 +237,7 @@ class WenoDataset(torch.utils.data.Dataset):
         uv = torch.load(f'dataset/uv{idx}.pt')
         return u, u, uv
 
-class BurgersDataset(torch.utils.data.Dataset):
-    def __init__(self, roll_out=200):
-        f = h5py.File('/home/gaoch/burgers.hdf5', 'r')
-        self.dt = 0.01
-        self.dx = 2 / 1024
-        self.nu = 0.001
-        self.u = np.array(f['tensor'], dtype=np.float64)  # (10000, 201, 1024)
-        self.roll_out = roll_out
-    
-    def __len__(self):
-        return 10000
-    
-    def __getitem__(self, idx):
-        return torch.tensor(self.u[idx], dtype=torch.float64)
+
 
 
 if __name__ == '__main__':
