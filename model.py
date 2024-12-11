@@ -9,14 +9,8 @@ def stencil_c(f0, f1, f2, f3, f4): return  1/3 * f2 + 5/6 * f3 -  1/6 * f4
 
 
 class stencilCNN1D(nn.Module):
-    def __init__(self, dt, dx):
+    def __init__(self, dt, dx, name, param):
         super(stencilCNN1D, self).__init__()
-        # self.stencil_1 = nn.Parameter(torch.tensor([2/6, -7/6, 11/6], dtype=torch.float64))
-        # self.stencil_2 = nn.Parameter(torch.tensor([-1/6, 5/6, 2/6], dtype=torch.float64))
-        # self.stencil_3 = nn.Parameter(torch.tensor([1/3, 5/6, -1/6], dtype=torch.float64))
-        
-        # self.stencil = nn.Conv1d(1, 3, 5, padding=0, bias=False)
-        # self.stencil = torch.nn.Parameter(torch.tensor([[[2/6, -7/6, 11/6, 0, 0]], [[0, -1/6, 5/6, 2/6, 0]], [[0, 0, 1/3, 5/6, -1/6]]], dtype=torch.float64))
         self.stencil = torch.nn.Parameter(torch.tensor([[[1/3]], [[-1/6]], [[1/3]]], dtype=torch.float64))
         # self.stencil.weight = torch.nn.Parameter(torch.tensor([[[2/6, -7/6, 11/6, 0, 0]], [[0, -1/6, 5/6, 2/6, 0]], [[0, 0, 1/3, 5/6, -1/6]]], dtype=torch.float64))
         # self.stencil.weight = torch.nn.Parameter(torch.tensor([[[0, 0, 3/8, 6/8, -1/8]], [[0, 0, 3/8, 6/8, -1/8]], [[0, 0, 3/8, 6/8, -1/8]]], dtype=torch.float64))
@@ -28,6 +22,8 @@ class stencilCNN1D(nn.Module):
         self.weno_flag = True
         self.dt = dt
         self.dx = dx
+        self.name = name
+        self.param = param
 
     def betas(self, u):
         u00 = u[:, :, :-5] * u[:, :, :-5]
@@ -84,10 +80,25 @@ class stencilCNN1D(nn.Module):
     def weno2(self, u):
         return self.weno(self.weno(u))
     
+    def weno_x(self, u):
+        B, T, L, W = u.shape
+        res = self.weno(torch.permute(u, (0, 2, 1, 3)).reshape(-1, T, W))
+        return res.reshape(B, L, T, W).permute(0, 2, 1, 3)
+    
+    def weno_y(self, u):
+        B, T, L, W = u.shape
+        res = self.weno(torch.permute(u, (0, 3, 1, 2)).reshape(-1, T, L))
+        return res.reshape(B, W, T, L).permute(0, 2, 3, 1)
+
+    
+    def _apply_bc(self, u):
+        if self.bc == 'periodic':
+            return torch.concat((u[:, :, -4:-1], u, u[:, :, 1:4]), dim=-1)
+        elif self.bc == 'second':
+            return nn.functional.pad(u, (3, 3), mode='replicate')
+
     def weno(self, u):
-        # plt.plot(u[0, 0].detach().cpu().numpy())
-        # u = nn.functional.pad(u, (3, 3), mode='circular')  # [B, 1, L]
-        u = torch.concat((u[:, :, -4:-1], u, u[:, :, 1:4]), dim=-1)
+        u = self._apply_bc(u)
         # u = torch.concat((u[:, :, -3:], u, u[:, :, :3]), dim=-1)
         # self.stencil.weight.data = self.stencil.weight.data * self.mask
         weight1 = torch.cat((self.stencil[0], -torch.ones(1, 1).cuda() * 0.5 - 2 * self.stencil[0], torch.ones(1, 1).cuda() * 1.5 + self.stencil[0], torch.zeros(1, 2).cuda()), dim=-1)
@@ -104,42 +115,17 @@ class stencilCNN1D(nn.Module):
             s2 = 13/12 * (u[:, :, 1:-4] - 2 * u[:, :, 2:-3] + u[:, :, 3:-2])**2 + 1/4 * (u[:, :, 1:-4] - u[:, :, 3:-2])**2
             s3 = 13/12 * (u[:, :, 2:-3] - 2 * u[:, :, 3:-2] + u[:, :, 4:-1])**2 + 1/4 * (3 * u[:, :, 2:-3] - 4 * u[:, :, 3:-2] + u[:, :, 4:-1])**2
 
-            # print('s1', s1[:, :, :10])
-            # print('s2', s2[:, :, :10])
-            # print('s3', s3[:, :, :10])
-
             eps = 1e-12
             a1 = 1/10 / (eps + s1)**2
             a2 = 6/10 / (eps + s2)**2
             a3 = 3/10 / (eps + s3)**2
 
-            # print('a1', a1[:, :, :10])
-            # print('a2', a2[:, :, :10])
-            # print('a3', a3[:, :, :10])
-
             w1 = a1 / (a1 + a2 + a3)
             w2 = a2 / (a1 + a2 + a3)
             w3 = a3 / (a1 + a2 + a3)
-
-            # print('w1', w1[:, :, :10])
-            # print('w2', w2[:, :, :10])
-            # print('w3', w3[:, :, :10])
-
-
-            # print('w1', w1)
-            # print('w2', w2)
-            # print('w3', w1+w2+w3)
-            # plt.plot(w1[0, 0].detach().cpu().numpy())
-            
-            # plt.savefig('w1.png')
-            # plt.close()
-            # exit()
             
             k = w1 * k[:, 0:1] + w2 * k[:, 1:2] + w3 * k[:, 2:3]
-            # k[:, 0:1] *= w1
-            # k[:, 1:1] *= w2
-            # k[:, 2:1] *= w3
-            # print('k', k[:, :, :10])
+
             return (k[:, :, 1:] - k[:, :, :-1]) / self.dx
             return k
         else:
@@ -165,23 +151,72 @@ class stencilCNN1D(nn.Module):
         # print(wenoR[:, :, :10])
         return -wenoL - wenoR
 
+    def forward(self, uc):
+        if self.name == 'Burgers1D':
+            k1 = self.params['nu'] / torch.pi * self.weno(self.upwind(uc)) * self.dt + self.flux_splitting(uc) * self.dt
+            k2 = self.params['nu'] / torch.pi * self.weno(self.upwind(uc + k1*0.5)) * self.dt + self.flux_splitting(uc + k1*0.5) * self.dt
+            k3 = self.params['nu'] / torch.pi * self.weno(self.upwind(uc + k2*0.5)) * self.dt + self.flux_splitting(uc + k2*0.5) * self.dt
+            k4 = self.params['nu'] / torch.pi * self.weno(self.upwind(uc + k3*1)) * self.dt + self.flux_splitting(uc + k3*1) * self.dt
 
-    def forward(self, u, order=1):
-        if order == 1:
-            k1 = self.weno(u)
-            k2 = self.weno(u + k1 * self.k[0])
-            k3 = self.weno(u + k2 * self.k[1])
-            k4 = self.weno(u + k3 * self.k[2])
-            # du = (k1 + 2 * k2 + 2 * k3 + k4) / 6
-            du = self.fc(torch.stack((k1, k2, k3, k4), dim=-1)).squeeze(-1)
+            du = (k1 + 2*k2 + 2*k3 + k4) / 6
             return du
-        elif order == 2:
-            k1 = self.weno(-self.weno(u)/self.dt)
-            k2 = self.weno(-self.weno(u + k1 * self.k[0])/self.dt)
-            k3 = self.weno(-self.weno(u + k2 * self.k[1])/self.dt)
-            k4 = self.weno(-self.weno(u + k3 * self.k[2])/self.dt)
-            du = self.fc(torch.stack((k1, k2, k3, k4), dim=-1)).squeeze(-1)
+        
+        elif self.name == 'Advection1D':
+            k1 = - self.params['beta'] * self.weno(uc) * self.dt
+            k2 = - self.params['beta'] * self.weno(uc + k1*0.5) * self.dt
+            k3 = - self.params['beta'] * self.weno(uc + k2*0.5) * self.dt
+            k4 = - self.params['beta'] * self.weno(uc + k3*1) * self.dt
+            du = (k1 + 2*k2 + 2*k3 + k4) / 6
             return du
+
+        elif self.name == 'ReactionDiffusion1D':
+            rho = self.params['rho']
+            nu = self.params['nu']
+
+            k1 = nu * self.upwind2(uc) * self.dt
+            # k2 = nu * self.model.weno2(uc + k1 * 0.5) * self.model.dt
+            # k3 = nu * self.model.weno2(uc + k2 * 0.5) * self.model.dt
+            # k4 = nu * self.model.weno2(uc + k3) * self.model.dt
+            # du = (k1 + 2*k2 + 2*k3 + k4) / 6
+            du = k1
+            tmp = torch.exp(-torch.ones(1, dtype=torch.float64)*self.params['rho']*self.model.dt*0.5).item()
+            up = 1 / (1 + tmp * (1-uc) / uc)
+
+            utmp = up + du * 0.5
+            k2 = nu * self.upwind2(utmp) * self.dt
+            tmp = torch.exp(-torch.ones(1, dtype=torch.float64)*self.params['rho']*self.dt).item()
+            up = 1 / (1 + tmp * (1-uc) / uc)
+            u = up + k2
+            du = u - uc
+            return du
+
+        elif self.name == 'DiffusionSorption1D':
+            # print(self.params)
+            phi, nf, D = self.params['phi'], self.params['nf'], self.params['D']
+            retard = 1 + (1 - phi) / phi * self.params['rho_s'] * self.params['k'] * nf * uc ** (nf-1)
+            du = D / retard * self.upwind2(uc, bc='second') * self.dt
+            du[:, :, 0] += D / retard[:, :, 0] / self.dx ** 2 * self.dt
+            du[:, :, -1] += D / retard[:, :, -1] / self.dx**2 * (uc[:,:,-2] - uc[:,:,-1]) / self.dx * D * self.dt
+            return du
+        
+        elif self.name == 'ShallowWater2D':
+            g = self.params['g']
+            h = uc[..., 0]
+            u = uc[..., 1]
+            v = uc[..., 2]
+            hu = h * u
+            hv = h * v
+
+            k1_h = - self.weno_x(hu) * self.dt - self.weno_y(hv) * self.dt
+            k1_hu = - self.weno_x(hu*u + 0.5*g*h*h) * self.dt - self.weno_y(hu*v)
+            k1_hv = - self.weno_y(hv*v + 0.5*g*h*h) * self.dt - self.weno_x(hu*v)
+
+            h_new = h + k1_h
+            u_new = (hu + k1_hu) / h_new
+            v_new = (hv + k1_hv) / h_new
+            return torch.stack((h_new, u_new, v_new), dim=-1)
+        else:
+            raise NotImplementedError(f"Unknown PDE: {self.name}")
     
     def train_params(self):
         return self.parameters()
@@ -207,50 +242,16 @@ def gt_generator(name, wavespeed, xc, t):
         return 0.5 + 0.5 * (xc)
 
 
-
-if __name__ == '__main__':
-    cfl_number = 0.5
-    wavespeed = 1
-    num_cells = 128
-    name = 'step'
-    net = stencilCNN1D()
-    xv = torch.linspace(-1, 1, num_cells + 1)
-    xc = 0.5 * (xv[1:] + xv[:-1])
-    dx = xv[1] - xv[0]
-    dt = abs(cfl_number * dx.item() / wavespeed)
-    u = gt_generator(name, wavespeed, xc, 0)[None, None, :]
-    t = 0.0
-    for i in range(100):
-        u = net(u)
-        t += dt
-        u_gt = gt_generator(name, wavespeed, xc, t)
-        err = ((u - u_gt)**2).mean().item()
-        plt.plot(u[0, 0].detach().numpy(), '.', markersize='5', label = "Numeric, t=%.2f" %i, zorder = 0)
-        plt.plot(u_gt.detach().numpy())
-        plt.savefig(f'./figs/{i}.png')
-        plt.close()
-        print(f'err at time {t:.2f}: {err:.2e}')
-
-
 class PDE():
-    def __init__(self, model: stencilCNN1D, name='Advection1D', params=None):
+    def __init__(self, model: stencilCNN1D, name='Advection1D', bc='periodic', params=None):
         self.name = name
         self.model = model
         self.params = params
+        self.bc = bc
     
     def RK4(self, uc):
         net = self.model
         if self.name == 'Burgers1D':
-            # k1 = self.params['nu'] / torch.pi * net.weno(net.weno(uc)) * net.dt - net.weno(uc) * net.dt
-            # k2 = self.params['nu'] / torch.pi * net.weno(net.weno(uc + k1*0.5)) * net.dt - net.weno(uc + k1*0.5) * net.dt
-            # k3 = self.params['nu'] / torch.pi * net.weno(net.weno(uc + k2*0.5)) * net.dt - net.weno(uc + k2*0.5) * net.dt
-            # k4 = self.params['nu'] / torch.pi * net.weno(net.weno(uc + k3*1)) * net.dt - net.weno(uc + k3*1) * net.dt
-            
-            # k1 = self.params['nu'] / torch.pi * net.upwind(net.upwind(uc)) * net.dt + net.flux_splitting(uc) * net.dt
-            # k2 = self.params['nu'] / torch.pi * net.upwind(net.upwind(uc + k1*0.5)) * net.dt + net.flux_splitting(uc + k1*0.5) * net.dt
-            # k3 = self.params['nu'] / torch.pi * net.upwind(net.upwind(uc + k2*0.5)) * net.dt + net.flux_splitting(uc + k2*0.5) * net.dt
-            # k4 = self.params['nu'] / torch.pi * net.upwind(net.upwind(uc + k3*1)) * net.dt + net.flux_splitting(uc + k3*1) * net.dt
-            
             k1 = self.params['nu'] / torch.pi * net.weno(net.upwind(uc)) * net.dt + net.flux_splitting(uc) * net.dt
             k2 = self.params['nu'] / torch.pi * net.weno(net.upwind(uc + k1*0.5)) * net.dt + net.flux_splitting(uc + k1*0.5) * net.dt
             k3 = self.params['nu'] / torch.pi * net.weno(net.upwind(uc + k2*0.5)) * net.dt + net.flux_splitting(uc + k2*0.5) * net.dt
@@ -296,5 +297,15 @@ class PDE():
             du[:, :, 0] += D / retard[:, :, 0] / self.model.dx ** 2 * self.model.dt
             du[:, :, -1] += D / retard[:, :, -1] / self.model.dx**2 * (uc[:,:,-2] - uc[:,:,-1]) / self.model.dx * D * self.model.dt
             return du
+        
+        elif self.name == 'ShallowWater2D':
+            g = self.params['g']
+            h = uc[..., 0]
+            u = uc[..., 1]
+            v = uc[..., 2]
+            hu = h * u
+            hv = h * v
+
+            k1_h = self.weno_x(hu)
         else:
             raise NotImplementedError(f"Unknown PDE: {self.name}")

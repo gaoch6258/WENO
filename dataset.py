@@ -19,6 +19,8 @@ def get_dataset(name, config):
         return ReactionDiffusion1DDataset(config['data_path'])
     elif name == 'DiffusionSorption1D':
         return DiffusionSorption1DDataset(config['data_path'])
+    elif name == 'ShallowWater2D':
+        return ShallowWaterDataset(config['data_path'])
     else:
         raise ValueError(f'Unknown dataset {name}')
 
@@ -84,6 +86,19 @@ class DiffusionSorption1DDataset(torch.utils.data.Dataset):
     def __getitem__(self, idx):
         return self.u[idx]
 
+class ShallowWaterDataset(torch.utils.data.Dataset):
+    def __init__(self, data_path):
+        self.f = h5py.File(data_path, 'r')
+    
+    def __len__(self):
+        return len(self.f.keys())
+    
+    def __getitem__(self, idx):
+        index = str(idx).zfill(4)
+        data = np.array(self.f[str(idx)]['data'], dtype=np.float64)
+        data = torch.tensor(data, dtype=torch.float64)
+        return data  # (101, 128, 128, 3) h u v
+    
 
 class FourierDataset(torch.utils.data.Dataset):
     def __init__(self, num_cells, series, wavespeed, cfl_number, num_samples, dt, scale=1024):

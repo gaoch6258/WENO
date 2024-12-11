@@ -1,0 +1,53 @@
+------- Evaluating DiffusionSorption1D --------------
+------- Reading Dataset --------------
+------- Dataset loaded --------------
+Evaluating Roll Out: 1
+Iter 0, Loss: 0.00017734188229917187
+Iter 1, Loss: 0.00017742414726934407
+Iter 2, Loss: 0.0001766961549431853
+Iter 3, Loss: 0.0001780983536044677
+Iter 4, Loss: 0.0001778311399211408
+Iter 5, Loss: 0.0001782666610889807
+Iter 6, Loss: 0.00017787677882020003
+Iter 7, Loss: 0.00017837992343317028
+Iter 8, Loss: 0.00017811212589531166
+Iter 9, Loss: 0.0001780594726296052
+Final Mean Loss for DiffusionSorption1D with rollout = 1 is: 0.00017780867347028106
+------------------------------------
+
+
+Evaluating Roll Out: 10
+Iter 0, Loss: 0.0009831633015630957
+Iter 1, Loss: 0.0009825035437923616
+Iter 2, Loss: 0.0009835186908489309
+Iter 3, Loss: 0.000984210623114602
+Iter 4, Loss: 0.000984381721805803
+Iter 5, Loss: 0.0009873158558299636
+Iter 6, Loss: 0.0009846669484748906
+Iter 7, Loss: 0.0009861413171765082
+Iter 8, Loss: 0.000985130141486814
+Iter 9, Loss: 0.0009846630977106395
+Final Mean Loss for DiffusionSorption1D with rollout = 10 is: 0.0009845694294199347
+------------------------------------
+
+
+Evaluating Roll Out: 100
+Iter 0, Loss: 0.00520795541434183
+Iter 1, Loss: 0.005205684738333124
+Iter 2, Loss: 0.00520981117570026
+Iter 3, Loss: 0.005212862779605214
+Iter 4, Loss: 0.005214968078050658
+Iter 5, Loss: 0.0052292851841238015
+Iter 6, Loss: 0.005215436604795924
+Iter 7, Loss: 0.005223406265050605
+Iter 8, Loss: 0.005218043237321179
+Iter 9, Loss: 0.005215962308893207
+Final Mean Loss for DiffusionSorption1D with rollout = 100 is: 0.005215341690927744
+------------------------------------
+
+
+Evaluating Roll Out: 200
+Traceback (most recent call last):
+  File "/home/gaoch/weno/eval_1D.py", line 81, in <module>
+    # print(u[1, j])
+IndexError: index 200 is out of bounds for dimension 1 with size 101

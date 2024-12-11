@@ -11,8 +11,7 @@ from tqdm import tqdm
 
 parser = argparse.ArgumentParser()
 # parser.add_argument('--roll_out', action='store_true')
-parser.add_argument('--pde_type', type=str, default='DiffusionSorption1D')
-parser.add_argument('--plot', action='store_true')
+parser.add_argument('--pde_type', type=str, default='ShallowWater2D')
 args = parser.parse_args()
 
 pde_type = args.pde_type
@@ -45,10 +44,10 @@ for pde_name in data_config.keys():
     # dataset = WenoDataset()
     dataloader = torch.utils.data.DataLoader(dataset, batch_size=train_config['batch_size'], shuffle=False)
 
-    net = stencilCNN1D(dt, dx, pde_type, data_config[pde_name]['bc']).cuda()
+    net = stencilCNN1D(dt, dx).cuda()
     # net.load_state_dict(torch.load('./ckpt/stencilCNN.pt'))
     net.eval()
-    # pde = PDE(net, pde_type, data_config[pde_name]['bc'], data_config[pde_name]['params'])
+    pde = PDE(net, pde_type, data_config[pde_name]['params'])
     roll_out = train_config['roll_out']
     criterion = torch.nn.MSELoss(reduction='none')
 
@@ -63,7 +62,7 @@ for pde_name in data_config.keys():
             mini_start = time.time()
             u = data.cuda()
             # u = u[:, :, :4:]
-            # B, T, L = u.shape
+            B, T, L = u.shape
             # xv = torch.linspace(-1, 1, num_cells + 1, dtype=torch.float64)
             # xc = 0.5 * (xv[1:] + xv[:-1])
             # u = xc**2
@@ -71,11 +70,11 @@ for pde_name in data_config.keys():
             
             # for j in tqdm(range(T-ro)):
             j=0
-            uc = u[:, j:j+1]
+            uc = u[:, j:j+1, :]
             for k in range(train_config['record']*ro):
             # for k in range(config['record']):
                 with torch.no_grad():
-                    du = net(uc)
+                    du = pde.RK4(uc)
                     uc = uc + du
             # print(du[1])
             # print(u[1, j])
@@ -89,13 +88,12 @@ for pde_name in data_config.keys():
                 # plt.savefig(f'./figs/erro_{k}_{j}_{i}.png')
                 # plt.close()
 
-                if args.plot:
-                    plt.plot(u[1, j+ro, :].detach().cpu().numpy(), 'r', label='gt')
-                    plt.plot(uc[1, 0, :].detach().cpu().numpy(), 'b', label='next')
-                    plt.plot(error[1, :].detach().cpu().numpy(), 'g', label='error')
-                    plt.legend()
-                    plt.savefig(f'./figs/pred_{k}_{j}_{i}.png')
-                    plt.close()
+                plt.plot(u[1, j+ro, :].detach().cpu().numpy(), 'r', label='gt')
+                plt.plot(uc[1, 0, :].detach().cpu().numpy(), 'b', label='next')
+                plt.plot(error[1, :].detach().cpu().numpy(), 'g', label='error')
+                plt.legend()
+                plt.savefig(f'./figs/pred_{k}_{j}_{i}.png')
+                plt.close()
 
         losses = torch.tensor(losses).mean()
         print(f'Final Mean Loss for {pde_name} with rollout = {ro} is: {losses}')

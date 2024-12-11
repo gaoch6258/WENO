@@ -1,0 +1,22 @@
+train_config:
+  num_cells: 128
+  x_min: -2.5
+  x_max: 2.5
+  y_min: -2.5
+  y_max: 2.5
+  dt: 0.01
+  batch_size: 100
+  record: 1
+  roll_out:
+   - 1
+   - 10
+   - 50
+   - 100
+
+
+data_config: 
+  shallowwater2D:
+    data_path: '/home/gaoch/dataset/shallowwater2D/2D_rdb_NA_NA.h5'
+    params:
+      g: 1.0
+      bc: 'second'
