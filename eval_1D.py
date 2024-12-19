@@ -45,8 +45,8 @@ for pde_name in data_config.keys():
     # dataset = WenoDataset()
     dataloader = torch.utils.data.DataLoader(dataset, batch_size=train_config['batch_size'], shuffle=False)
 
-    net = stencilCNN1D(dt, dx, pde_type, data_config[pde_name]['bc']).cuda()
-    # net.load_state_dict(torch.load('./ckpt/stencilCNN.pt'))
+    net = stencilCNN1D(dt, dx, pde_type, data_config[pde_name]['params']).cuda()
+    net.load_state_dict(torch.load('./ckpt/stencilCNN.pt'))
     net.eval()
     # pde = PDE(net, pde_type, data_config[pde_name]['bc'], data_config[pde_name]['params'])
     roll_out = train_config['roll_out']
